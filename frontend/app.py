@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 from datetime import datetime
 import os
+import streamlit.components.v1 as components
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -108,7 +109,7 @@ st.markdown("""
         color: #ffffff !important;
     }
     
-    /* 8. Interception Panel Styling */
+    /* 8. Interception Panel Styling (Main Content Interface) */
     .interception-panel {
         background: rgba(251, 191, 36, 0.15) !important;
         backdrop-filter: blur(10px);
@@ -119,6 +120,32 @@ st.markdown("""
         margin-top: 15px;
         margin-bottom: 15px;
         border: 1px solid rgba(251, 191, 36, 0.2);
+    }
+
+    /* MODAL CONTAINER OVERRIDES */
+    div[role="dialog"] {
+        background-color: #991b1b !important;
+        border: 2px solid #ef4444 !important;
+        border-radius: 24px !important;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7) !important;
+    }
+    div[role="dialog"] button[p-aria-label="Close"] svg, 
+    div[role="dialog"] button {
+        color: #ffffff !important;
+    }
+    div[role="dialog"] h1, div[role="dialog"] h2, div[role="dialog"] h3, div[role="dialog"] h4,
+    div[role="dialog"] p, div[role="dialog"] span, div[role="dialog"] label, div[role="dialog"] div {
+        color: #ffffff !important;
+        text-shadow: none !important;
+    }
+    .modal-intercept-panel {
+        background: rgba(0, 0, 0, 0.3) !important;
+        padding: 18px;
+        border-radius: 14px;
+        border-left: 5px solid #ffffff;
+        color: #ffffff !important;
+        margin-top: 10px;
+        margin-bottom: 15px;
     }
     
     /* 9. Feed Post Displays */
@@ -155,6 +182,21 @@ st.markdown("""
         transform: translateY(-2px);
         box-shadow: 0 6px 20px rgba(239, 68, 68, 0.6) !important;
     }
+    
+    /* SPECIFIC LIGHTER RED ACTION BUTTON FOR MODAL VIEW */
+    div[role="dialog"] div.stButton > button {
+        background: linear-gradient(135deg, #f87171 0%, #ef4444 100%) !important;
+        color: #ffffff !important;
+        border: 1px solid rgba(255, 255, 255, 0.3) !important;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3) !important;
+        font-weight: bold !important;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    div[role="dialog"] div.stButton > button:hover {
+        background: linear-gradient(135deg, #fca5a5 0%, #f87171 100%) !important;
+        transform: scale(1.01);
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -163,10 +205,20 @@ if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 if "is_admin" not in st.session_state:
     st.session_state["is_admin"] = False
+if "show_warning_modal" not in st.session_state:
+    st.session_state["show_warning_modal"] = False
+if "harmful_detected" not in st.session_state:
+    st.session_state["harmful_detected"] = False
+if "scroll_trigger" not in st.session_state:
+    st.session_state["scroll_trigger"] = False
+if "modal_data" not in st.session_state:
+    st.session_state["modal_data"] = {}
+# Counter variable used to reset text area buffer cleanly without runtime exceptions
+if "textarea_counter" not in st.session_state:
+    st.session_state["textarea_counter"] = 0
 
 # --- Render Login Portal First If Not Verified ---
 if not st.session_state["authenticated"]:
-    # Using columns to center the login interface neatly
     left_space, center_login_box, right_space = st.columns([2, 3, 2])
     
     with center_login_box:
@@ -189,18 +241,16 @@ if not st.session_state["authenticated"]:
                 st.session_state["is_admin"] = True
                 st.rerun()
             else:
-                # Any other combination registers as standard user
                 st.session_state["authenticated"] = True
                 st.session_state["is_admin"] = False
                 st.rerun()
                 
-    st.stop()  # Lock script executions until authentication completes
+    st.stop()
 
 # --- Sidebar Navigation (Dynamic Access Matrix) ---
 st.sidebar.title("🛡️ Project SHEild")
 st.sidebar.markdown("---")
 
-# Matrix logic decides whether to add the Console portal option
 navigation_options = ["User Feed & Interface"]
 if st.session_state["is_admin"]:
     navigation_options.append("Moderator Console")
@@ -208,13 +258,40 @@ if st.session_state["is_admin"]:
 page = st.sidebar.radio("Navigation Portal", navigation_options)
 st.sidebar.markdown("---")
 
-# Added a clean logout utility
 if st.sidebar.button("Exit Gateway session", use_container_width=True):
     st.session_state["authenticated"] = False
     st.session_state["is_admin"] = False
     st.rerun()
 
 st.sidebar.caption("Hackathon Build v1.2.0 | Security Layer Active")
+
+
+# --- DIALOG POPUP WARNING UTILITY ---
+@st.dialog("⚠️ Policy Enforcement Warning")
+def render_harmful_content_modal():
+    st.markdown("<h3 style='color: white; margin-top: 0;'>Revise before you post, content is harmful</h3>", unsafe_allow_html=True)
+    
+    data = st.session_state["modal_data"]
+    
+    st.markdown(f"""
+        <div class="modal-intercept-panel">
+            <strong>System Guardrails Active:</strong> Your input string matches signature patterns associated with 
+            <strong>{data.get('category')}</strong> domains with <strong>{data.get('severity')}</strong> severity flags.
+        </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    if st.button("Revise", use_container_width=True):
+        st.session_state["show_warning_modal"] = False
+        st.session_state["scroll_trigger"] = True
+        st.rerun()
+
+
+# --- Manage Modal Display State Trigger ---
+if st.session_state["show_warning_modal"]:
+    render_harmful_content_modal()
+
 
 # ==========================================
 # PAGE 1: USER FEED & INTERFACE
@@ -235,11 +312,14 @@ if page == "User Feed & Interface":
         </div>
     """, unsafe_allow_html=True)
     
+    # Text area key parameter utilizes dynamic increment tracking to prevent state exceptions
+    current_text_key = f"broadcast_input_{st.session_state['textarea_counter']}"
     user_comment = st.text_area(
         "Input String",
         placeholder="Share your thoughts...", 
         height=120, 
-        label_visibility="collapsed"
+        label_visibility="collapsed",
+        key=current_text_key
     )
     
     col_spacer, col_btn = st.columns([10, 2])
@@ -253,42 +333,24 @@ if page == "User Feed & Interface":
                 
                 if response.status_code == 200:
                     res_data = response.json()
-                    
-                    score = res_data.get("score", 0)
-                    category = res_data.get("category", "Unknown")
-                    severity = res_data.get("severity", "Mild")
                     warning_triggered = res_data.get("warning", False)
                     
+                    st.session_state["modal_data"] = {
+                        "score": res_data.get("score", 0),
+                        "category": res_data.get("category", "Unknown"),
+                        "severity": res_data.get("severity", "Mild")
+                    }
+                    
                     if warning_triggered:
-                        st.markdown(f"""
-                            <div class="interception-panel">
-                                <strong>Structural Guardrails Engaged:</strong> System analysis indicates that this string falls under 
-                                the domain classification of <strong>{category}</strong> with <strong>{severity}</strong> severity metrics. 
-                                Modification is advised to adhere to structural platform governance policies.
-                            </div>
-                        """, unsafe_allow_html=True)
-                        
-                        st.markdown("""
-                            <div class="custom-card">
-                                <h4 style="margin-top:0; color:white;">Real-Time Behavioral Signature Analysis</h4>
-                            </div>
-                        """, unsafe_allow_html=True)
-                        
-                        m_col1, m_col2, m_col3 = st.columns(3)
-                        with m_col1:
-                            st.metric(label="Abuse Vector Weight", value=f"{score}%", delta="Boundary Deviation Violation", delta_color="inverse")
-                        with m_col2:
-                            st.metric(label="Assigned Domain Class", value=category)
-                        with m_col3:
-                            st.metric(label="Calculated Urgency Level", value=severity)
-                        
-                        action_col1, action_col2 = st.columns([3, 4])
-                        with action_col1:
-                            if st.button("Confirm Overwrite & Flag", type="secondary", use_container_width=True):
-                                st.warning("Submission encrypted, bypassed, and routed directly to monitoring indices.")
+                        st.session_state["harmful_detected"] = True
+                        st.session_state["show_warning_modal"] = True
+                        st.rerun()
                     else:
+                        st.session_state["harmful_detected"] = False
                         st.success("Analysis confirmed zero threat vectors. Transmission cleared.")
                         st.balloons()
+                        st.session_state["textarea_counter"] += 1  # Indirect widget reset
+                        st.rerun()
                 else:
                     st.error("Infrastructure Interface Error: Invalid network response code recorded.")
             except requests.exceptions.ConnectionError:
@@ -296,8 +358,56 @@ if page == "User Feed & Interface":
         else:
             st.warning("Input container buffer evaluated as empty. Specify a text parameter.")
 
+    # --- HTML SCROLL TARGET ANCHOR ---
+    st.markdown("<div id='analysis-scroll-target'></div>", unsafe_allow_html=True)
+
+    # --- RENDER ANALYSIS METRICS BELOW THE TEXTBOX ONLY ---
+    if st.session_state["harmful_detected"]:
+        data = st.session_state["modal_data"]
+        
+        st.markdown(f"""
+            <div class="interception-panel">
+                <strong>Structural Guardrails Engaged:</strong> System analysis indicates that this string falls under 
+                the domain classification of <strong>{data.get('category')}</strong> with <strong>{data.get('severity')}</strong> severity metrics. 
+                Modification is advised to adhere to structural platform governance policies.
+            </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("### Real-Time Behavioral Signature Analysis")
+        m_col1, m_col2, m_col3 = st.columns(3)
+        with m_col1:
+            st.metric(label="Abuse Vector Weight", value=f"{data.get('score')}%", delta="Boundary Deviation Violation", delta_color="inverse")
+        with m_col2:
+            st.metric(label="Assigned Domain Class", value=data.get('category'))
+        with m_col3:
+            st.metric(label="Calculated Urgency Level", value=data.get('severity'))
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # FIXED DETONATION CIRCUIT: Safely increments dynamic keys to flush memory buffer cleanly
+        if st.button("Confirm Overwrite & Flag", type="secondary"):
+            st.session_state["textarea_counter"] += 1  # Updates widget key context instance
+            st.session_state["harmful_detected"] = False  # Collapses verification statistics panel
+            st.toast("Submission flagged and input fields cleared.", icon="🛡️")
+            st.rerun()
+
+    # --- AUTOMATED JAVASCRIPT SCROLL INTERACTION EXECUTOR ---
+    if st.session_state["scroll_trigger"]:
+        st.session_state["scroll_trigger"] = False
+        components.html(
+            """
+            <script>
+                var element = window.parent.document.getElementById("analysis-scroll-target");
+                if (element) {
+                    element.scrollIntoView({behavior: "smooth", block: "start"});
+                }
+            </script>
+            """,
+            height=0,
+            width=0
+        )
+
     st.markdown("### Network Feed Activity")
-    
     st.markdown("""
         <div class="feed-card">
             <div class="feed-user">@engineering_lead</div>
@@ -310,7 +420,7 @@ if page == "User Feed & Interface":
     """, unsafe_allow_html=True)
 
 # ==========================================
-# PAGE 2: MODERATOR CONSOLE (Only Admin Accessible)
+# PAGE 2: MODERATOR CONSOLE 
 # ==========================================
 elif page == "Moderator Console" and st.session_state["is_admin"]:
     st.title("System Evaluation & Audit Dashboard")
