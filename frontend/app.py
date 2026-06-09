@@ -184,14 +184,15 @@ if not st.session_state["authenticated"]:
         if st.button("Authenticate Entry", use_container_width=True):
             if username_input.strip() == "" or password_input.strip() == "":
                 st.warning("Please fill out both entry parameters.")
-            elif username_input == "admin" and password_input == "admin":
+            elif  username_input == "admin" and password_input == "admin":
                 st.session_state["authenticated"] = True
                 st.session_state["is_admin"] = True
+                st.session_state["username"] = username_input
                 st.rerun()
             else:
-                # Any other combination registers as standard user
                 st.session_state["authenticated"] = True
                 st.session_state["is_admin"] = False
+                st.session_state["username"] = username_input
                 st.rerun()
                 
     st.stop()  # Lock script executions until authentication completes
@@ -249,7 +250,13 @@ if page == "User Feed & Interface":
     if submit_triggered:
         if user_comment.strip():
             try:
-                response = requests.post(BACKEND_URL, json={"text": user_comment}, timeout=5)
+                response = requests.post(
+                BACKEND_URL,
+                json={
+                    "text": user_comment,
+                    "username": st.session_state["username"]
+                },
+                timeout=5)
                 
                 if response.status_code == 200:
                     res_data = response.json()
