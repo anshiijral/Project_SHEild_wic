@@ -1,8 +1,16 @@
 from flask import Flask, request, jsonify
 from datetime import datetime
-
+import mysql.connector
 app = Flask(__name__)
 
+db = mysql.connector.connect(
+    host="localhost",
+    user="root",
+    password="sql123",
+    database="project_sheild"
+)
+
+cursor = db.cursor()
 
 def classify_text(text):
     """
@@ -54,6 +62,7 @@ def analyze():
         })
 
     data = request.get_json()
+    print(data)
 
     if not data:
         return jsonify({
@@ -61,12 +70,23 @@ def analyze():
         }), 400
 
     text = data.get("text", "")
+    username = data.get("username", "")
 
     score, category = classify_text(text)
 
     severity = get_severity(score)
 
     warning = score >= 40
+    if warning:
+        cursor.execute(
+                """
+                INSERT INTO flagged_posts
+                (username, text, category, severity, score)
+                VALUES (%s, %s, %s, %s, %s)
+                """,
+                (username, text, category, severity, score))
+
+        db.commit()
 
     return jsonify({
         "text": text,
