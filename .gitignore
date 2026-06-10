@@ -1,0 +1,9 @@
+# Ignore all large model files
+*.pkl
+*.h5
+*.pt
+# Ignore a specific large folder
+backend/large_data/
+venv/
+.pytest_cache/
+__pycache__/
