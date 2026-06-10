@@ -1,2 +1,14 @@
+<<<<<<< HEAD
 venv/
 venv/
+=======
+# Ignore all large model files
+*.pkl
+*.h5
+*.pt
+# Ignore a specific large folder
+backend/large_data/
+venv/
+.pytest_cache/
+__pycache__/
+>>>>>>> e4454775cd5ec85ef15b881df0dc6df14d7e4fc3
